@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CODEPAD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0e0e0e;
+    --surface: #161616;
+    --border:  #2a2a2a;
+    --amber:   #f5a623;
+    --green:   #39ff6e;
+    --red:     #ff4545;
+    --muted:   #555;
+    --text:    #d4d4d4;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* grain overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.35;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.9rem;
+    letter-spacing: 0.18em;
+    color: var(--amber);
+    line-height: 1;
+  }
+  .logo span { color: var(--text); }
+
+  /* language tabs */
+  .lang-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg);
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .lang-tabs button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .lang-tabs button:hover { color: var(--text); }
+  .lang-tabs button.active {
+    background: var(--amber);
+    color: #000;
+    font-weight: 700;
+  }
+
+  /* run button */
+  #runBtn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 9px 22px;
+    background: var(--green);
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 0 0 0 #39ff6e44;
+  }
+  #runBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 16px 4px #39ff6e33;
+  }
+  #runBtn:active { transform: scale(0.97); }
+  #runBtn.running { background: var(--amber); animation: pulse 0.6s ease infinite alternate; }
+  @keyframes pulse { to { box-shadow: 0 0 20px 6px #f5a62344; } }
+
+  /* ── MAIN SPLIT ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+    min-height: 0;
+    height: calc(100vh - 65px);
+  }
+
+  /* ── EDITOR PANE ── */
+  .pane {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pane + .pane { border-left: 1px solid var(--border); }
+
+  .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  .pane-header .dot-row { display: flex; gap: 6px; }
+  .pane-header .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+
+  /* editor wrapper with line numbers */
+  .editor-wrap {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #lineNums {
+    padding: 16px 12px 16px 16px;
+    background: var(--surface);
+    color: #383838;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    text-align: right;
+    user-select: none;
+    min-width: 44px;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+    white-space: pre;
+  }
+
+  #editor {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    padding: 16px;
+    border: none;
+    outline: none;
+    resize: none;
+    tab-size: 2;
+    caret-color: var(--amber);
+    overflow-y: auto;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  #editor::selection { background: #f5a62333; }
+  #editor::-webkit-scrollbar { width: 6px; height: 6px; }
+  #editor::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+  /* ── OUTPUT PANE ── */
+  .output-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #output {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    padding: 16px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #output::-webkit-scrollbar { width: 6px; }
+  #output::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+  #output.error { color: var(--red); }
+
+  #htmlFrame {
+    width: 100%; height: 100%;
+    border: none;
+    background: #fff;
+    display: none;
+  }
+
+  /* status bar */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 5px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .statusbar .pill {
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--border);
+    color: var(--text);
+  }
+  .statusbar .pill.ok  { background: #39ff6e22; color: var(--green); }
+  .statusbar .pill.err { background: #ff454522; color: var(--red); }
+  .statusbar .pill.idle { background: var(--border); color: var(--muted); }
+
+  /* ── CLEAR BTN ── */
+  #clearBtn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 4px 12px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #clearBtn:hover { color: var(--red); border-color: var(--red); }
+
+  /* blinking cursor in output */
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: var(--green);
+    margin-left: 2px;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; height: auto; }
+    .pane + .pane { border-left: none; border-top: 1px solid var(--border); }
+    main { height: calc(100vh - 110px); }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">CODE<span>PAD</span></div>
+
+  <div class="lang-tabs">
+    <button class="active" data-lang="javascript">JS</button>
+    <button data-lang="html">HTML</button>
+    <button data-lang="python">PY</button>
+  </div>
+
+  <button id="runBtn">▶ RUN</button>
+</header>
+
+<!-- MAIN -->
+<main>
+  <!-- Editor -->
+  <div class="pane">
+    <div class="pane-header">
+      <div class="dot-row">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+      </div>
+      <span id="fileLabel">script.js</span>
+    </div>
+    <div class="editor-wrap">
+      <div id="lineNums">1</div>
+      <textarea id="editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div class="pane">
+    <div class="pane-header">
+      <div class="dot-row">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+      </div>
+      <span>OUTPUT</span>
+      <button id="clearBtn">CLEAR</button>
+    </div>
+    <div class="output-wrap">
+      <div id="output"><span class="cursor"></span></div>
+      <iframe id="htmlFrame" sandbox="allow-scripts"></iframe>
+    </div>
+  </div>
+</main>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <span id="statusPill" class="pill idle">IDLE</span>
+  <span id="langStatus">JAVASCRIPT</span>
+  <span id="lineStatus">LN 1, COL 1</span>
+  <span id="charCount">0 chars</span>
+</div>
+
+<script>
+// ── STARTER SNIPPETS ──────────────────────────────────────────
+const SNIPPETS = {
+  javascript: `// JavaScript — runs live in your browser
+function greet(name) {
+  return \`Hello, \${name}! 👋\`;
+}
+
+// Loop example
+for (let i = 1; i <= 5; i++) {
+  console.log(\`\${i}. \${greet("World")}\`);
+}
+
+// Array magic
+const nums = [3, 1, 4, 1, 5, 9, 2, 6];
+const evens = nums.filter(n => n % 2 === 0);
+console.log("Even numbers:", evens);
+console.log("Sum:", nums.reduce((a, b) => a + b, 0));`,
+
+  html: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+      background: #0e0e0e;
+      color: #fff;
+    }
+    h1 { color: #f5a623; margin-bottom: 12px; }
+    button {
+      padding: 10px 24px;
+      background: #39ff6e;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    #out { margin-top: 20px; font-size: 1.4rem; }
+  </style>
+</head>
+<body>
+  <h1>Live HTML Preview</h1>
+  <p>Edit the code on the left →</p>
+  <button onclick="document.getElementById('out').textContent='🎉 It works!'">
+    Click me!
+  </button>
+  <div id="out"></div>
+</body>
+</html>`,
+
+  python: `# Python — simulated output
+# (Python runs server-side; this demos the syntax)
+
+def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        print(a, end=" ")
+        a, b = b, a + b
+    print()
+
+print("Fibonacci sequence:")
+fibonacci(10)
+
+# List comprehension
+squares = [x**2 for x in range(1, 8)]
+print("Squares:", squares)
+
+# Dictionary
+person = {"name": "Ada", "lang": "Python", "year": 1991}
+for k, v in person.items():
+    print(f"  {k}: {v}")`
+};
+
+// Simulated Python output
+const PYTHON_OUTPUT = {
+  default: `Fibonacci sequence:\n0 1 1 2 3 5 8 13 21 34 \nSquares: [1, 4, 9, 16, 25, 36, 49]\n  name: Ada\n  lang: Python\n  year: 1991`
+};
+
+// ── STATE ─────────────────────────────────────────────────────
+let currentLang = 'javascript';
+
+const editor     = document.getElementById('editor');
+const lineNums   = document.getElementById('lineNums');
+const output     = document.getElementById('output');
+const htmlFrame  = document.getElementById('htmlFrame');
+const runBtn     = document.getElementById('runBtn');
+const clearBtn   = document.getElementById('clearBtn');
+const fileLabel  = document.getElementById('fileLabel');
+const statusPill = document.getElementById('statusPill');
+const langStatus = document.getElementById('langStatus');
+const lineStatus = document.getElementById('lineStatus');
+const charCount  = document.getElementById('charCount');
+
+const FILE_NAMES = { javascript:'script.js', html:'index.html', python:'main.py' };
+
+// ── INIT ──────────────────────────────────────────────────────
+editor.value = SNIPPETS.javascript;
+updateLineNums();
+updateStats();
+
+// ── LANGUAGE SWITCH ───────────────────────────────────────────
+document.querySelectorAll('.lang-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.lang-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentLang = btn.dataset.lang;
+    editor.value = SNIPPETS[currentLang];
+    fileLabel.textContent = FILE_NAMES[currentLang];
+    langStatus.textContent = currentLang.toUpperCase();
+    clearOutput();
+    updateLineNums();
+    updateStats();
+  });
+});
+
+// ── RUN ───────────────────────────────────────────────────────
+runBtn.addEventListener('click', runCode);
+editor.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode(); }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = editor.selectionStart, end = editor.selectionEnd;
+    editor.value = editor.value.substring(0,s) + '  ' + editor.value.substring(end);
+    editor.selectionStart = editor.selectionEnd = s + 2;
+  }
+});
+
+function runCode() {
+  runBtn.classList.add('running');
+  runBtn.textContent = '⏳ RUNNING';
+  setTimeout(() => {
+    try {
+      if (currentLang === 'javascript') runJS();
+      else if (currentLang === 'html')  runHTML();
+      else                              runPython();
+      setStatus('ok', 'OK');
+    } catch(e) {
+      showError(e.message);
+      setStatus('err', 'ERROR');
+    }
+    runBtn.classList.remove('running');
+    runBtn.textContent = '▶ RUN';
+  }, 120);
+}
+
+// ── JS RUNNER ─────────────────────────────────────────────────
+function runJS() {
+  const lines = [];
+  const fakeConsole = {
+    log:   (...a) => lines.push(a.map(fmt).join(' ')),
+    warn:  (...a) => lines.push('⚠ ' + a.map(fmt).join(' ')),
+    error: (...a) => lines.push('✖ ' + a.map(fmt).join(' ')),
+    info:  (...a) => lines.push('ℹ ' + a.map(fmt).join(' ')),
+  };
+  const fn = new Function('console', editor.value);
+  fn(fakeConsole);
+  showOutput(lines.length ? lines.join('\n') : '(no output)', false);
+}
+
+function fmt(v) {
+  if (v === null) return 'null';
+  if (v === undefined) return 'undefined';
+  if (typeof v === 'object') return JSON.stringify(v, null, 2);
+  return String(v);
+}
+
+// ── HTML RUNNER ───────────────────────────────────────────────
+function runHTML() {
+  output.style.display = 'none';
+  htmlFrame.style.display = 'block';
+  htmlFrame.srcdoc = editor.value;
+  setStatus('ok', 'PREVIEW');
+}
+
+// ── PYTHON RUNNER (simulated) ─────────────────────────────────
+function runPython() {
+  const code = editor.value;
+  // Simple simulation: detect print statements and "run" them
+  const printLines = [];
+  const printRe = /print\(([^)]+)\)/g;
+  let match;
+
+  // Check if it's the default snippet
+  const isDefault = code.includes('fibonacci') && code.includes('Ada');
+  if (isDefault) {
+    showOutput(`$ python main.py\n\n` + PYTHON_OUTPUT.default, false);
+    return;
+  }
+
+  // Generic: extract string literals from print()
+  while ((match = printRe.exec(code)) !== null) {
+    const arg = match[1].trim();
+    const strMatch = arg.match(/^["'`](.+)["'`]$/);
+    if (strMatch) printLines.push(strMatch[1]);
+    else printLines.push(`<evaluated: ${arg}>`);
+  }
+
+  const result = printLines.length
+    ? `$ python main.py\n\n` + printLines.join('\n')
+    : `$ python main.py\n\n⚠ Python runs server-side.\nThis is a simulated preview.\nUse replit.com or codepen for live Python.`;
+
+  showOutput(result, false);
+}
+
+// ── OUTPUT HELPERS ────────────────────────────────────────────
+function showOutput(text, isError) {
+  htmlFrame.style.display = 'none';
+  output.style.display = 'block';
+  output.className = isError ? 'error' : '';
+  output.textContent = text;
+  output.scrollTop = output.scrollHeight;
+}
+
+function showError(msg) {
+  htmlFrame.style.display = 'none';
+  output.style.display = 'block';
+  output.className = 'error';
+  output.textContent = `✖ Error: ${msg}`;
+}
+
+function clearOutput() {
+  htmlFrame.style.display = 'none';
+  output.style.display = 'block';
+  output.className = '';
+  output.innerHTML = '<span class="cursor"></span>';
+  setStatus('idle', 'IDLE');
+}
+
+clearBtn.addEventListener('click', clearOutput);
+
+// ── LINE NUMBERS ──────────────────────────────────────────────
+editor.addEventListener('input', () => { updateLineNums(); updateStats(); });
+editor.addEventListener('scroll', () => { lineNums.scrollTop = editor.scrollTop; });
+
+function updateLineNums() {
+  const lines = editor.value.split('\n').length;
+  lineNums.textContent = Array.from({length: lines}, (_,i) => i+1).join('\n');
+}
+
+// ── CURSOR POS ────────────────────────────────────────────────
+editor.addEventListener('keyup', updateCursorPos);
+editor.addEventListener('click', updateCursorPos);
+function updateCursorPos() {
+  const text = editor.value.substring(0, editor.selectionStart);
+  const lines = text.split('\n');
+  lineStatus.textContent = `LN ${lines.length}, COL ${lines[lines.length-1].length+1}`;
+}
+
+function updateStats() {
+  charCount.textContent = `${editor.value.length} chars`;
+}
+
+// ── STATUS ────────────────────────────────────────────────────
+function setStatus(type, label) {
+  statusPill.className = `pill ${type}`;
+  statusPill.textContent = label;
+}
+</script>
+</body>
+</html>
